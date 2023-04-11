@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Google Maps Directions with Waypoints</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      /* Global styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f8f8f8;
+}
+
+h1 {
+  text-align: center;
+  margin-top: 20px;
+  margin-bottom: 30px;
+}
+
+/* Map styles */
+#map {
+  height: 70vh;
+  width: 100%;
+}
+
+/* Sidebar styles */
+#sidebar {
+  background-color: #fff;
+  box-sizing: border-box;
+  height: 30vh;
+  overflow-y: scroll;
+  padding: 20px;
+  position: absolute;
+  top: 70vh;
+  width: 100%;
+  border-top: 1px solid #ddd;
+}
+
+#sidebar h2 {
+  font-size: 1.2rem;
+  margin-top: 0;
+}
+
+#route-info {
+  margin-bottom: 20px;
+}
+
+#waypoints-list {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+#waypoints-list li {
+  margin-bottom: 10px;
+}
+
+/* Form styles */
+form {
+  display: flex;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  width: 100%;
+}
+
+input[type="text"],
+textarea,
+select,
+input[type="number"] {
+  border: none;
+  border-radius: 3px;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  padding: 10px;
+  width: 100%;
+}
+
+button[type="submit"] {
+  background-color: #4CAF50;
+  border: none;
+  border-radius: 3px;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-top: 10px;
+  padding: 10px;
+  text-align: center;
+  width: 100%;
+}
+
+button[type="submit"]:hover {
+  background-color: #3e8e41;
+}
+
+/* Custom marker styles */
+.custom-marker {
+  background-color: #f44336;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: bold;
+  padding: 8px;
+  position: absolute;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.custom-marker:hover {
+  cursor: pointer;
+  background-color: #d32f2f;
+}
+
+    </style>
+  </head>
+  <body>
+    <h1>Google Maps Directions with Waypoints</h1>
+    <div id="map"></div>
+    <div id="sidebar">
+      <h2>Directions</h2>
+      <form id="directions-form">
+        <label for="origin-input">Origin:</label>
+        <input id="origin-input" type="text" required>
+
+        <label for="destination-input">Destination:</label>
+        <input id="destination-input" type="text" required>
+
+        <label for="waypoints-input">Waypoints (name, address, latitude, longitude):</label>
+        <textarea id="waypoints-input" rows="5"></textarea>
+
+        <label for="mode-select">Travel mode:</label>
+        <select id="mode-select">
+          <option value="DRIVING">Driving</option>
+          <option value="WALKING">Walking</option>
+          <option value="BICYCLING">Bicycling</option>
+          <option value="TRANSIT">Transit</option>
+        </select>
+
+        <label for="zoom-input">Zoom level:</label>
+        <input id="zoom-input" type="number" min="1" max="20" value="14">
+
+        <button type="submit">Get Directions</button>
+      </form>
+
+      <div id="route-info"></div>
+
+      <h2>Waypoints</h2>
+      <ul id="waypoints-list"></ul>
+    </div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDgmUIoXiqB5s2ncjx060iL8vOM7D_hJtw&callback=initMap" async defer></script>
+    <script>
+var map;
+var directionsService;
+var directionsRenderer;
+var markers = [];
+
+// Get user's current location
+function getLocation() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(showPosition);
+  } else {
+    alert("Geolocation is not supported by this browser.");
+  }
+}
+
+// Show user's current position on the map
+function showPosition(position) {
+  var lat = position.coords.latitude;
+  var lng = position.coords.longitude;
+  var userLatLng = new google.maps.LatLng(lat, lng);
+  
+  // Add marker for user's current position
+  var userMarker = new google.maps.Marker({
+    position: userLatLng,
+    map: map,
+    title: "Your location"
+  });
+  
+  // Center map on user's current position
+  map.setCenter(userLatLng);
+}
+
+// Add a waypoint to the map
+function addWaypoint() {
+  // Get waypoint location from input
+  var waypointLocation = document.getElementById("waypoint-input").value;
+  
+  // Geocode the location and add a marker
+  var geocoder = new google.maps.Geocoder();
+  geocoder.geocode({ address: waypointLocation }, function(results, status) {
+    if (status === "OK") {
+      var waypointLatLng = results[0].geometry.location;
+      
+      // Add marker for waypoint
+      var waypointMarker = new google.maps.Marker({
+        position: waypointLatLng,
+        map: map,
+        title: "Waypoint"
+      });
+      
+      // Add waypoint marker to array
+      markers.push(waypointMarker);
+      
+      // Center map on all markers
+      var bounds = new google.maps.LatLngBounds();
+      for (var i = 0; i < markers.length; i++) {
+        bounds.extend(markers[i].getPosition());
+      }
+      map.fitBounds(bounds);
+    } else {
+      alert("Geocode was not successful for the following reason: " + status);
+    }
+  });
+}
+
+// Calculate route and display directions on map
+function calculateRoute() {
+  // Get start and end points from input
+  var start = document.getElementById("start-input").value;
+  var end = document.getElementById("end-input").value;
+
+  // Build waypoints array from markers
+  var waypoints = [];
+  for (var i = 0; i < markers.length; i++) {
+    waypoints.push({
+      location: markers[i].getPosition(),
+      stopover: true
+    });
+  }
+
+  // Build request object
+  var request = {
+    origin: start,
+    destination: end,
+    waypoints: waypoints,
+    optimizeWaypoints: true,
+    travelMode: google.maps.TravelMode.DRIVING
+  };
+
+  // Call directions service to calculate route
+  directionsService.route(request, function(result, status) {
+    if (status == google.maps.DirectionsStatus.OK) {
+      // Display route on map
+      directionsRenderer.setDirections(result);
+      
+      // Display total distance and duration
+      var distance = 0;
+      var duration = 0;
+      var legs = result.routes[0].legs;
+      for (var i = 0; i < legs.length; i++) {
+        distance += legs[i].distance.value;
+        duration += legs[i].duration.value;
+      }
+      document.getElementById("distance").innerHTML = (distance / 1000).toFixed(2) + " km";
+      document.getElementById("duration").innerHTML = Math.ceil(duration / 60) + " min";
+    } else {
+      alert("Directions request failed due to " + status);
+    }
+  });
+}
+
+// Initialize the map and
+
+    </script>
+  </body>
+</html>
